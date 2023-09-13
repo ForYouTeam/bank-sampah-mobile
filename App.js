@@ -5,6 +5,7 @@ import TabNavigation from './navigation/TabNavigation';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback } from 'react';
+import { StateProvide } from './services/PaymentProcess';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -27,11 +28,13 @@ export default function App() {
   }
 
   return (
-    <View style={styles.container} onLayout={onLayoutRootView}>
-      <NavigationContainer>
-        <TabNavigation />
-      </NavigationContainer>
-    </View>
+    <StateProvide>
+      <View style={styles.container} onLayout={onLayoutRootView}>
+        <NavigationContainer>
+          <TabNavigation />
+        </NavigationContainer>
+      </View>
+    </StateProvide>
   );
 }
 
