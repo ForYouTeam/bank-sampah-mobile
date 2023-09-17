@@ -6,6 +6,8 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback } from 'react';
 import { StateProvide } from './services/PaymentProcess';
+import { SafeAreaProvider } from 'react-native-safe-area-context'
+// import SplashScreen from './components/SplashScreen';
 
 SplashScreen.preventAutoHideAsync();
 

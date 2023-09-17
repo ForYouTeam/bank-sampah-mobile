@@ -6,7 +6,9 @@ import { PaymentProcess } from "../services/PaymentProcess";
 
 const Bayar = () => {
 
-  const [getPayloadForm, setPayloadForm, getIsLoading, setIsLoading, modalVisible, setModalVisible ] = useContext(PaymentProcess)
+  const [getPayloadForm, setPayloadForm ] = useContext(PaymentProcess)
+  const [getIsLoading, setIsLoading] = useState(false)
+  const [modalVisible, setModalVisible] = useState(false)
   const changePayMethod = (payload) => {
     setPayloadForm({ onlinePayment: payload });
   };

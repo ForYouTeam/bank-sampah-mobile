@@ -1,12 +1,14 @@
-import { FlatList, Image, SafeAreaView, Text, View, ActivityIndicator } from 'react-native'
-import React, { Component, useContext } from 'react'
+import { FlatList, Image, SafeAreaView, Text, View, ActivityIndicator, RefreshControl, ScrollView } from 'react-native'
+import React, { Component, useContext, useEffect, useState } from 'react'
 import { Ionicons } from "@expo/vector-icons";
 import Colors from '../sharred/Colors';
 import { PaymentProcess } from '../services/PaymentProcess';
+import Pembayaran from '../ucase/Pembayaran';
+import Profile from '../ucase/Profile';
+import HomeSkelton from '../skelton/HomeSkelton';
 
 const Home = () => {
-  const [ getIsLoading ] = useContext(PaymentProcess)
-
+  const [refreshing, setRefreshing] = useState(false);
   const idrFromat = (number) => {
     const formatter = new Intl.NumberFormat('id-ID', {
       style: 'currency',
@@ -17,15 +19,91 @@ const Home = () => {
     return formatter.format(number);
   };
 
-  const paymentData = [
-    { id: '1', bank: 'bri', date: '2023-08-15', time: '12:00 wita', amount: 500000 , status: true  },
-    { id: '2', bank: 'bni', date: '2023-08-14', time: '12:00 wita', amount: 25000  , status: false },
-    { id: '3', bank: 'bri', date: '2023-08-13', time: '12:00 wita', amount: 300000 , status: true  },
-    { id: '4', bank: 'bri', date: '2023-08-13', time: '12:00 wita', amount: 300000 , status: true  },
-    { id: '5', bank: 'bni', date: '2023-08-13', time: '12:00 wita', amount: 500000 , status: false },
-    { id: '6', bank: 'bri', date: '2023-08-13', time: '12:00 wita', amount: 800000 , status: true  },
-    { id: '7', bank: 'bni', date: '2023-08-13', time: '12:00 wita', amount: 100000 , status: true  }, 
-  ];
+  const [getHistoryList, setHistoryList, getProfile, setProfile, isLoading, setLoading] = useContext(PaymentProcess)
+
+  const fetchData = async () => {
+    setRefreshing(true)
+    await Profile.getAllData()
+    .then((res) => {
+      setProfile({profile: res.data.data})
+    })
+    .catch((err) => {
+      console.log(err);
+    })
+    
+    await Pembayaran.getAllData()
+    .then((res) => {
+      const paymentData = res.data.data.map(item => {
+          const id = item.id.toString(); // Mengonversi ID ke string
+          const bank = item.metode_bayar.metode; // Mengambil nama bank
+          const date = item.created_at.split('T')[0]; // Mengambil tanggal
+          const time = item.created_at.split('T')[1].split('.')[0]; // Mengambil waktu
+          const amount = item.jumlah_bayar;
+          const status = item.konfirmasi === 1; // Mengubah status menjadi boolean
+      
+          return { id, bank, date, time, amount, status };
+      });
+      
+      setHistoryList({data: paymentData})
+    })
+    .catch((err) => {
+      console.log(err);
+    })
+    setTimeout(() => {
+      setLoading(false)
+    }, 800);
+    setRefreshing(false)
+  };
+
+  let bulanSekarang = new Date().toLocaleString('id-ID', { month: 'long' });
+
+  const MainView = () => {
+    if (!isLoading) {
+      return (
+        <View className="pt-12">
+          <ScrollView 
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={fetchData}
+              // Tambahkan deskripsi jika Anda ingin
+              title="Pull to refresh"
+            />
+          } >
+            <View className="flex justify-center px-4">
+              <Text className="text-gray-700" style={{ fontFamily: 'Montserrat-Regular' }}>Tagihanmu</Text>
+              <Text style={{ fontFamily: 'Montserrat-Medium' }} className="text-left text-3xl text-gray-700 uppercase">{ getProfile.profile?.nama ?? '' }</Text>
+            </View>
+            <View className="flex flex-row justify-between items-center mt-7 mx-2 rounded-3xl">
+              <View className="flex flex-col flex-grow rounded-l-lg px-4 py-[20px]" style={{backgroundColor: Colors.hardGreen}}>
+                <Text style={{ fontFamily: 'Montserrat-Medium' }} className="text-[13px] text-white">{ bulanSekarang }</Text>
+                <Text style={{ fontFamily: 'Montserrat-SemiBold' }} className="text-xl text-white" >{ idrFromat(getProfile.profile?.tagihan ?? 0) }</Text>
+              </View>
+              <LunasView/>
+            </View>
+          </ScrollView>
+          <SafeAreaView>
+            <View className="mt-5 h-[480px] pt-6 px-1">
+              <Text style={{ fontFamily: 'Montserrat-Bold' }} className="text-xl ml-2 text-gray-700">History Bayar</Text>
+  
+              <View className="pb-2">
+                <HistoryPaymentList />
+              </View>
+  
+            </View>
+          </SafeAreaView>
+        </View>
+      )
+    } else {
+      return (
+        <HomeSkelton />
+      )
+    }
+  }
+
+  useEffect(() => {
+    fetchData(); // Panggil fungsi fetchData di dalam useEffect
+  }, []);
 
   const bankImages = {
     bni: require('./../assets/icon/bni.png'),
@@ -53,22 +131,12 @@ const Home = () => {
     </View>
   )
 
-  const IsLoading = () => {
-    if (getIsLoading) {
-      <View>
-        <Text>
-          LOADING
-        </Text>
-      </View>
-    }
-  }
-
   const HistoryPaymentList = () => {
-    if (paymentData.length >= 1) {
+    if (getHistoryList.data) {
       return (
         <View>
           <FlatList
-            data={paymentData}
+            data={getHistoryList.data}
             renderItem={renderItem}
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}
@@ -84,34 +152,26 @@ const Home = () => {
       );
     }
   };
+
+  const LunasView = () => {
+    if (!getProfile.profile?.lunas) {
+      return (
+        <View className="flex flex-col rounded-r-lg px-4 py-[32px]" style={{backgroundColor: Colors.orange}}>
+          <Text style={{ fontFamily: 'Montserrat-Bold' }} className="text-white text-sm">Belum bayar</Text>
+        </View>
+      )
+    } else {
+     return (
+      <View className="flex flex-col rounded-r-lg px-4 py-[32px]" style={{backgroundColor: Colors.hardGreen}}>
+        <Text style={{ fontFamily: 'Montserrat-Bold' }} className="text-white text-sm">Sudah bayar</Text>
+      </View>
+     )
+    }
+  }
+
   return (
     <View>
-      <View className="pt-12">
-        <View className="flex justify-center px-4">
-          <Text className="text-gray-700" style={{ fontFamily: 'Montserrat-Regular' }}>Tagihanmu</Text>
-          <IsLoading/>
-          <Text style={{ fontFamily: 'Montserrat-Medium' }} className="text-left text-3xl text-gray-700">Gufran</Text>
-        </View>
-        <View className="flex flex-row justify-between items-center mt-7 mx-2 rounded-3xl">
-          <View className="flex flex-col flex-grow rounded-l-lg px-4 py-[20px]" style={{backgroundColor: Colors.hardGreen}}>
-            <Text style={{ fontFamily: 'Montserrat-Medium' }} className="text-[12px] text-white">Januari</Text>
-            <Text style={{ fontFamily: 'Montserrat-SemiBold' }} className="text-xl text-white" >Rp. 200.000</Text>
-          </View>
-          <View className="flex flex-col rounded-r-lg px-4 py-[32px]" style={{backgroundColor: Colors.orange}}>
-            <Text style={{ fontFamily: 'Montserrat-Bold' }} className="text-white text-sm">Sudah bayar</Text>
-          </View>
-        </View>
-        <SafeAreaView>
-          <View className="mt-5 h-[480px] pt-6 px-1">
-            <Text style={{ fontFamily: 'Montserrat-Bold' }} className="text-xl ml-2 text-gray-700">History Bayar</Text>
-
-            <View className="pb-2">
-              <HistoryPaymentList />
-            </View>
-
-          </View>
-        </SafeAreaView>
-      </View>
+      <MainView />
     </View>
   )
 }
