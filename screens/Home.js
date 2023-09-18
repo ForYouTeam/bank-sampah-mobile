@@ -19,7 +19,7 @@ const Home = () => {
     return formatter.format(number);
   };
 
-  const [getHistoryList, setHistoryList, getProfile, setProfile, isLoading, setLoading] = useContext(PaymentProcess)
+  const [getProfile, setProfile, isLoading, setLoading, historyPayment, setHistoryPayment, getPayloadForm] = useContext(PaymentProcess)
 
   const fetchData = async () => {
     setRefreshing(true)
@@ -44,7 +44,7 @@ const Home = () => {
           return { id, bank, date, time, amount, status };
       });
       
-      setHistoryList({data: paymentData})
+      setHistoryPayment(paymentData)
     })
     .catch((err) => {
       console.log(err);
@@ -132,11 +132,11 @@ const Home = () => {
   )
 
   const HistoryPaymentList = () => {
-    if (getHistoryList.data) {
+    if (historyPayment) {
       return (
         <View>
           <FlatList
-            data={getHistoryList.data}
+            data={historyPayment}
             renderItem={renderItem}
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}

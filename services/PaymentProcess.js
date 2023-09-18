@@ -3,14 +3,14 @@ import { createContext, useState } from "react";
 export const PaymentProcess = createContext();
 
 export const StateProvide = (props) => {
-  const [getPayloadForm, setPayloadForm] = useState({
-    onlinePayment: true,
-    ammount: 0,
-  });
+  // const [getPayloadForm, setPayloadForm] = useState({
+  //   onlinePayment: true,
+  //   jumlah_bayar: 0,
+  //   metode_bayar: null,
+  //   rekening_kirim: ""
+  // });
 
-  const [getHistoryList, setHistoryList] = useState({
-    data: [],
-  });
+  const [historyPayment, setHistoryPayment] = useState();
 
   const [getProfile, setProfile] = useState({
     profile: null,
@@ -21,10 +21,10 @@ export const StateProvide = (props) => {
   return (
     <PaymentProcess.Provider
       value={[
-        getPayloadForm,
-        setPayloadForm,
-        getHistoryList,
-        setHistoryList,
+        // getPayloadForm,
+        // setPayloadForm,
+        historyPayment,
+        setHistoryPayment,
         getProfile,
         setProfile,
         isLoading,
