@@ -8,6 +8,7 @@ import { useGlobal } from "../store/Global";
 import Pembayaran from "../ucase/Pembayaran";
 import Profile from "../ucase/Profile";
 import Metode from "../ucase/Metode";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 const SplashScreenComponent = () => {
   const mainLogo = require('./../assets/icon/main-logo.png')
@@ -161,48 +162,50 @@ const SplashScreenComponent = () => {
   }, []);
 
   return (
-    <Animated.View className="bg-white relative top-0 pt-[260px] right-2 h-full w-full">
-      <Animated.View
-       style={{
-        transform: [
-          {translateY: logoAnimation}
-        ]
-      }}>
-        <View className="flex flex-col items-center">
-          <Image className="h-[230px] w-[230px]" source={mainLogo} />
-          <Text className="mt-[-80px] text-center ml-6 font-normal text-[12px]">Solusi Hidup Tanpa Sampah</Text>
-        </View>
+    <KeyboardAwareScrollView className="bg-white ">
+      <Animated.View className="relative top-0 pt-[260px] right-2 h-full w-full">
+        <Animated.View
+        style={{
+          transform: [
+            {translateY: logoAnimation}
+          ]
+        }}>
+          <View className="flex flex-col items-center">
+            <Image className="h-[230px] w-[230px]" source={mainLogo} />
+            <Text className="mt-[-80px] text-center ml-6 font-normal text-[12px]">Solusi Hidup Tanpa Sampah</Text>
+          </View>
+        </Animated.View>
+        <Animated.View className="relative w-full bottom-[-490px] left-2 px-10"
+        style={{
+          transform: [
+            {translateY: formAnimation}
+          ]
+        }}>
+          <View>
+            <Text className="text-4xl text-gray-700 text-center" style={{ fontFamily: 'Montserrat-Bold' }} >LOGIN</Text>
+            <View className="mt-8">
+              <Text>Username</Text>
+              <TextInput onChangeText={(text) => {handleChangeValue(text, 'username')}} placeholderTextColor={'grey'} className="text-md py-1 border-[2px] mt-2 border-gray-400 px-4 rounded-xl" placeholder="input disini..." />
+            </View>
+            <View className="mt-4">
+              <Text>Password</Text>
+              <TextInput onChangeText={(text) => {handleChangeValue(text, 'password')}} secureTextEntry placeholderTextColor={'grey'} className="text-md py-1 border-[2px] mt-2 border-gray-400 px-4 rounded-xl" placeholder="input disini..." />
+            </View>
+            <View className="mt-8">
+              <Pressable disabled={isLoading} onPress={() => {loginProcess({
+                username: username,
+                password: password
+              })}} className="bg-teal-500 py-4 rounded-3xl flex flex-row gap-1 justify-center">
+                <Text className="text-center text-white text-md" style={{ fontFamily: 'Montserrat-Bold' }}>Masuk</Text>
+                {newLoading ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : ''}
+              </Pressable>
+            </View>
+          </View>
+        </Animated.View>
       </Animated.View>
-      <Animated.View className="relative w-full bottom-[-490px] left-2 px-10"
-      style={{
-        transform: [
-          {translateY: formAnimation}
-        ]
-      }}>
-        <View>
-          <Text className="text-4xl text-gray-700 text-center" style={{ fontFamily: 'Montserrat-Bold' }} >LOGIN</Text>
-          <View className="mt-8">
-            <Text>Username</Text>
-            <TextInput onChangeText={(text) => {handleChangeValue(text, 'username')}} placeholderTextColor={'grey'} className="text-md py-1 border-[2px] mt-2 border-gray-400 px-4 rounded-xl" placeholder="input disini..." />
-          </View>
-          <View className="mt-4">
-            <Text>Password</Text>
-            <TextInput onChangeText={(text) => {handleChangeValue(text, 'password')}} secureTextEntry placeholderTextColor={'grey'} className="text-md py-1 border-[2px] mt-2 border-gray-400 px-4 rounded-xl" placeholder="input disini..." />
-          </View>
-          <View className="mt-8">
-            <Pressable disabled={isLoading} onPress={() => {loginProcess({
-              username: username,
-              password: password
-            })}} className="bg-teal-500 py-4 rounded-3xl flex flex-row gap-1 justify-center">
-              <Text className="text-center text-white text-md" style={{ fontFamily: 'Montserrat-Bold' }}>Masuk</Text>
-              {newLoading ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : ''}
-            </Pressable>
-          </View>
-        </View>
-      </Animated.View>
-    </Animated.View>
+    </KeyboardAwareScrollView>
   )
 }
 
