@@ -1,201 +1,284 @@
-import { ActivityIndicator, Image, Pressable, Text, TextInput, TouchableOpacity, View, Modal, Button } from "react-native";
-import React, { Component, useContext, useState } from "react";
+import { ActivityIndicator, Button, Image, Modal, Pressable, Text, ToastAndroid, View } from 'react-native'
+import Colors from '../sharred/Colors'
+import { useGlobal } from '../store/Global'
 import { Ionicons } from "@expo/vector-icons";
-import Colors from "../sharred/Colors";
-import { PaymentProcess } from "../services/PaymentProcess";
+import { Picker } from '@react-native-picker/picker'
+import { useEffect, useState } from 'react'
+import * as Clipboard from 'expo-clipboard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import moment from 'moment';
+import Pembayaran from '../ucase/Pembayaran';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 const Bayar = () => {
+  const { profile, listPayMethod, payment, setPayment } = useGlobal()
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [isLoading, setLoading] = useState(false);
+  const [selectedValue, setSelectedValue] = useState(listPayMethod[0].id);
 
-  const [getPayloadForm, setPayloadForm, getProfile, historyPayment, setHistoryPayment ] = useContext(PaymentProcess)
-  const [getIsLoading, setIsLoading] = useState(false)
-  const [modalVisible, setModalVisible] = useState(false)
-  const changePayMethod = (payload) => {
-    setPayloadForm({ onlinePayment: payload });
-  };
-
-  const handleInputChange = (field, text) => {
-    setPayloadForm({
-      ...getPayloadForm,
-      [field]: text
-    });
-  };
-
-  const handleSwitchChange = (field, value) => {
-    setPayloadForm({
-      ...getPayloadForm,
-      [field]: value
-    });
-  };
-
-  const printPayload = () => {
-    console.log("ini form", getPayloadForm);
-    console.log("ini list", historyPayment);
-    console.log("ini profile", getProfile);
+  const handleChangeValue = (itemValue) => {
+    setSelectedValue(itemValue)
+    setPayment({
+      profile_id      : profile.profile_id,
+      metode_bayar_id : itemValue,
+      jumlah_bayar    : profile.tagihan,
+      kode_bayar      : generateInvoiceCode().toString()
+    })
   }
 
-  const RenderBody = () => {
-    if (getIsLoading) {
-      return (
-        <View className="h-[800px] w-full absolute top-0 right-0 bg-slate-500 z-10 opacity-80 flex flex-col items-center justify-center">
-          <ActivityIndicator size="large" color="white" />
-          <Pressable onPress={() => {setIsLoading(false)}} className="mt-3">
-            <Text style={{ fontFamily: "Montserrat-Regular" }} className="text-center text-md text-white">
-              Batal
-            </Text>
-          </Pressable>
-        </View>
-      )
+  const findObject = (payload) => {
+    return listPayMethod.find(item => item.id === payload)
+  }
+
+  const toggleModal = () => {
+    setModalVisible(!isModalVisible);
+  };
+
+  const generateInvoiceCode = () => {
+    const currentTimestamp = Math.floor(Date.now() / 1000); // Timestamp dalam satuan detik
+
+    // Konversi timestamp menjadi string
+    const timestampString = String(currentTimestamp);
+  
+    // Generate karakter acak (contoh: ABC123)
+    const randomChars = generateRandomCharacters(4); // Panjang karakter acak yang ingin Anda tambahkan
+  
+    // Gabungkan timestamp dan karakter acak untuk membuat kode invoice
+    const invoiceCode = `${timestampString}${randomChars}`;
+  
+    return invoiceCode;
+  }
+
+  const generateRandomCharacters = (length) => {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let randomChars = '';
+    for (let i = 0; i < length; i++) {
+      const randomIndex = Math.floor(Math.random() * characters.length);
+      randomChars += characters.charAt(randomIndex);
+    }
+    return randomChars;
+  }
+
+  const navigation = useNavigation();
+
+  const sendPayload = async (payload) => {
+    let paymentCode
+    let expiredCode
+    await AsyncStorage.getItem('payment-code')
+    .then((res) => {
+      paymentCode = res || null
+    })
+    
+    await AsyncStorage.getItem('expired-code')
+    .then((res) => {
+      expiredCode = res || null
+    })
+    
+    const thisTime = moment().toISOString()
+    if (expiredCode > thisTime) {
+      ToastAndroid.showWithGravity(
+        'Kamu baru saja membuat kode bayar, Coba lagi nanti',
+        ToastAndroid.LONG,
+        ToastAndroid.CENTER
+        );
+    } else {
+      setLoading(true)
+      setTimeout(async () => {
+        await Pembayaran.createOne(payload)
+        .then((res) => {
+          storeData()
+          setModalVisible(true)
+        })
+        .catch((err) => {
+          let status = err.response.status || 500
+          if (status === 401) {
+            AsyncStorage.setItem('user', '')
+            navigation.navigate('Login')
+          } else {
+            let status = err.response.status || 500
+            if (status === 500 || 400) {
+              ToastAndroid.showWithGravity(
+                'Server dalam perbaikan, coba lagi nanti',
+                ToastAndroid.LONG,
+                ToastAndroid.CENTER
+                );
+            }
+          }
+        })
+        setLoading(false)
+      }, 100);
     }
   }
 
-  const RenderEmpty = () => {
-    if (getProfile.profile?.lunas) {
-      return (
-        <View className="flex flex-col h-[800px] w-full top-0 right-0 z-10 justify-center items-center absolute bg-white">
-          <Image className="h-[170px] w-[170px]" source={require('./../assets/icon/finish.png')} />
-          <Text style={{ fontFamily: "Montserrat-Regular" }} className="text-[15px]">Tidak ada tagihan</Text>
-        </View>
-      )
-    } else {
-      return (
+  useEffect(() => {
+    setPayment({
+      profile_id      : profile.profile_id,
+      metode_bayar_id : selectedValue,
+      jumlah_bayar    : profile.tagihan,
+      kode_bayar      : generateInvoiceCode().toString()
+    })
+  }, [])
+
+  const storeData = async () => {
+    await AsyncStorage.setItem('expired-code', moment().add(1, 'minutes').toISOString())
+    await AsyncStorage.setItem('payment-code', payment.kode_bayar)
+  };
+
+  const copyToClipboard = async (textToCopy) => {
+    try {
+      await Clipboard.setStringAsync(textToCopy);
+      // Menampilkan notifikasi jika teks berhasil disalin ke clipboard
+      ToastAndroid.showWithGravity(
+        'Teks berhasil disalin ke clipboard ',
+        ToastAndroid.SHORT,
+        ToastAndroid.CENTER
+      );
+      setModalVisible(false)
+    } catch (error) {
+      console.error('Gagal menyalin teks ke clipboard:', error);
+      // Menampilkan notifikasi jika terjadi kesalahan saat menyalin teks ke clipboard
+      ToastAndroid.showWithGravity(
+        'Gagal menyalin teks ke clipboard',
+        ToastAndroid.SHORT,
+        ToastAndroid.CENTER
+      );
+    }
+  };
+
+  const MyModal = () => {
+    if(isModalVisible)
+    {
+      return(
         <View>
-          <View className="p-4 flex flex-row justify-center mt-12">
-            <Text
-              style={{ fontFamily: "Montserrat-SemiBold" }}
-              className="text-lg text-gray-700"
-            >
-              Buat kode pembayaran
-            </Text>
-          </View>
-          <View className="fex flex-row gap-1 justify-around mt-2 h-[130px]">
-            <TouchableOpacity
-              onPress={() => changePayMethod(true)}
-              className={`bg-slate-400 h-full w-2/5 p-2 rounded-xl shadow-lg shadow-gray-700 border-1 border-gray-900 ${
-                !getPayloadForm.onlinePayment ? "opacity-70" : ""
-              }`}
-              style={{ backgroundColor: Colors.online }}
-            >
-              <View>
-                <Text className="text-md text-white">Transfer</Text>
-                <View className="flex flex-row justify-center">
-                  <Image
-                    className="h-[80px] w-[80px] mt-2"
-                    source={require("./../assets/icon/offline.png")}
-                  />
+          <Modal
+            animationType="slide"
+            transparent={true}
+            visible={isModalVisible}
+            onRequestClose={toggleModal}
+          >
+            <View className="absolute top-0 left-0 w-full h-full bg-black opacity-40" />
+
+            <View className="flex flex-row justify-center">
+              <View className="bg-white w-[300px] h-[300px] top-[170px] rounded-xl px-3 py-2">
+                <Pressable onPress={() => {setModalVisible(false)}} className="absolute right-2 top-2">
+                  <Ionicons name="close" size={24} color="grey" />
+                </Pressable>
+                <View className="py-4 px-2 flex flex-col items-center justify-center h-full w-full">
+                  <Image source={require('./../assets/icon/offline.png')} className="h-[110px] w-[110px]" />
+                  <View className="my-2 flex flex-col items-center">
+                    <Text className="capitalize text-gray-700">{findObject(selectedValue).rekening_terima}</Text>
+                    <Text style={{ fontFamily: 'Montserrat-SemiBold' }} className="text-gray-700 text-md">{findObject(selectedValue).rekening}</Text>
+                  </View>
+                  <Text style={{ fontFamily: 'Montserrat-Regular' }} className="mt-3">Code Bayar</Text>
+                  <View className="pt-2 flex flex-row gap-2 items-center">
+                    <Text style={{ fontFamily: 'Montserrat-SemiBold' }} className="font-bold text-xl text-gray-700">{payment.kode_bayar}</Text>
+                    <Pressable onPress={() => { copyToClipboard(payment.kode_bayar) }}>
+                      <Ionicons name="md-copy" size={20} color="grey" />
+                    </Pressable>
+                  </View>
                 </View>
               </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => changePayMethod(false)}
-              className={`bg-slate-400 h-full w-2/5 p-2 rounded-xl shadow-lg shadow-gray-700 border-1 border-gray-900 ${
-                getPayloadForm.onlinePayment ? "opacity-70" : ""
-              }`}
-              style={{ backgroundColor: Colors.offline }}
-            >
-              <View>
-                <Text className="text-md text-white">Bayar Dikantor</Text>
-                <View className="flex flex-row justify-center">
-                  <Image
-                    className="h-[95px] w-[95px] mt-2"
-                    source={require("./../assets/icon/online.png")}
-                  />
-                </View>
-              </View>
-            </TouchableOpacity>
-          </View>
-          <View className="mt-10 px-4">
-            <Text style={{ fontFamily: "Montserrat-Regular" }}>
-              Jumlah Tagihan Harus Dibayar
-            </Text>
-            <View className="flex flex-col gap-2 mt-2 pb-3 pt-1 px-1 pr-3 rounded-xl bg-cyan-500">
-              <View className="flex flex-row justify-between">
-                <Text style={{ fontFamily: "Montserrat-Regular" }} className="text-[15px] text-white">Total</Text>
-                <Text style={{ fontFamily: "Montserrat-Regular" }} className="text-[15px] text-white">Rp. 200.000</Text>
-              </View>
-              <View className="flex flex-row justify-between">
-                <Text style={{ fontFamily: "Montserrat-Regular" }} className="text-[15px] text-white">A.N</Text>
-                <Text style={{ fontFamily: "Montserrat-Regular" }} className="text-[15px] text-white">Gufran Gani</Text>
-              </View>
-              <View className="flex flex-row justify-start">
-                <Text style={{ fontFamily: "Montserrat-Regular" }} className="text-[12px] mt-4 text-white">Alamat: Jl. Asam 1, No.25</Text>
-              </View>
             </View>
-          </View>
-          <View className="mt-8 px-3">
-            <Text
-              className="text-[12px] mb-2 ml-1 text-gray-700"
-              style={{ fontFamily: "Montserrat-Regular" }}
-            >
-              Rekening Pengirim
-            </Text>
-            <View className="flex flex-row items-center border-2 border-gray-400 px-4 rounded-xl">
-              <TextInput
-                value={getPayloadForm.rekening_kirim}
-                onChangeText={(text) => handleInputChange("rekening_kirim", text)}
-                keyboardType="numeric"
-                className="appearance-none py-2 pl-1 pr-3 text-gray-700 text-lg"
-                placeholderTextColor={"grey"}
-                placeholder="Cth: 200.000"
-              />
-            </View>
-          </View>
-          <View className="mt-4 px-3">
-            <Text
-              className="text-[12px] mb-2 ml-1 text-gray-700"
-              style={{ fontFamily: "Montserrat-Regular" }}
-            >
-              Jumlah yang dibayar
-            </Text>
-            <View className="flex flex-row items-center border-2 border-gray-400 px-4 rounded-xl">
-              <Text className="text-lg text-gray-500">Rp.</Text>
-              <TextInput
-                value={getPayloadForm.jumlah_bayar}
-                onChangeText={(text) => handleInputChange("jumlah_bayar", text)}
-                keyboardType="numeric"
-                className="appearance-none py-2 pl-1 pr-3 text-gray-700 text-lg"
-                placeholderTextColor={"grey"}
-                placeholder="Cth: 200.000"
-              />
-            </View>
-          </View>
-          <View className="mt-11 flex flex-row justify-center">
-            <Pressable onPress={() => {setIsLoading(true); setModalVisible(true); printPayload()}} className="py-4 w-[200px] rounded-xl bg-teal-500">
-              <Text  style={{ fontFamily: "Montserrat-Bold" }} className="text-center text-md text-white">
-                Buat Kode Sekarang
-              </Text>
-            </Pressable>
-          </View>
+          </Modal>
         </View>
       )
     }
   }
 
   return (
-    <View>
-      <RenderBody />
-      {/* BATASSS */}
-      
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View className="top-[170px] flex flex-row justify-center">
-          <View className="bg-white rounded-xl h-[270px] w-[250px] items-center pt-4 flex flex-col">
-            <Pressable onPress={() => {setModalVisible(false)}} className="absolute right-1 top-1 z-10">
-              <Ionicons name="close-circle-outline" size={24} color="grey" />
-            </Pressable>
-            <Image className="h-[150px] w-[150px] mt-6" source={require('./../assets/icon/success.png')} />
-            <Text className="mt-2">Data berhasil diproses</Text>
+    <View className="">
+      <MyModal />
+      {/* TOP AREA */}
+      <View className="rounded-b-[35px] px-2 py-2 h-[215px]" style={{backgroundColor: Colors.orange}}>
+        <View className="h-[29px] w-[70px] bg-cyan-700 relative rounded-2xl top-[45px] left-[20px] flex flex-row justify-center items-center">
+          <View className="flex flex-row justify-center items-center gap-2">
+            <View className="h-2 w-2 bg-white rounded-full"></View>
+            <Text className="text-white uppercase text-[10px]">Late</Text>
           </View>
         </View>
-      </Modal>
-
-      {/* BATASSS */}
-      <RenderEmpty />
-      
+        <View className="h-[80px] w-full relative top-[55px] lef px-5">
+          <Text style={{ fontFamily: 'Montserrat-Bold' }} className="text-[28px] text-white">
+            INVOICE
+          </Text>
+        </View>
+      </View>
+      <View className="h-[190px] w-full absolute top-[130px] flex flex-row justify-center items-center">
+        <View className=" h-[160px] w-[330px] rounded-2xl px-2 py-2 bg-white shadow-2xl border-2 border-gray-100 flex flex-row justify-between">
+          <View className="mt-4 ml-3">
+            <Text className="text-[12px] text-gray-700 font-normal" style={{ fontFamily: 'Montserrat-SemiBold' }}>A.n</Text>
+            <Text className="uppercase text-[21px] text-gray-700 mt-3" style={{ fontFamily: 'Montserrat-Bold' }}>{ profile.nama }</Text>
+            <View className="w-[160px]">
+              <Text className="text-[12px] mt-1 text-gray-700" style={{ fontFamily: 'Montserrat-Medium' }}>Jl. Asam 1, Lere, Palu Barat, Kota Palu</Text>
+            </View>
+          </View>
+          <View className="bg-slate-100 w-[140px] flex flex-col items-center justify-center rounded-xl">
+            {profile.lunas ? (
+              <View>
+                <Text className="text-gray-500">Lunas</Text>
+                <Text className="text-[23px] text-gray-700" style={{ fontFamily: 'Montserrat-Bold', color: Colors.orange }} >200.000</Text>
+              </View>
+            ) : (
+              <View>
+                <Text className="text-gray-500">Total</Text>
+                <Text className="text-[23px] text-gray-700" style={{ fontFamily: 'Montserrat-Bold', color: Colors.orange }} >200.000</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+      <View style={{display: profile.lunas ? 'flex' : 'none'}} className="w-full h-[560px] flex flex-col justify-center items-center">
+        <Image className="h-[200px] w-[200px]" source={require('./../assets/icon/finish.png')} />
+        <Text>Kamu telah membayar bulan ini</Text>
+      </View>
+      <View style={{display: !profile.lunas ? 'flex' : 'none'}}>
+        <View className="mt-[120px]">
+          <View className="flex flex-row justify-between px-4">
+            <Text className="text-gray-500 text-[15px]" style={{ fontFamily: 'Montserrat-Bold' }} >Detail</Text>
+            <Text className="text-gray-500 text-[15px]" style={{ fontFamily: 'Montserrat-Bold' }} >...</Text>
+          </View>
+          <View className="flex flex-row justify-between px-4 mt-9">
+            <Text className="text-gray-900 text-[18px]" style={{ fontFamily: 'Montserrat-SemiBold' }} >Rumah</Text>
+            <Text className="text-gray-900 text-[18px] capitalize" style={{ fontFamily: 'Montserrat-SemiBold' }} >{profile.jenis_rumah}</Text>
+          </View>
+          <View className="flex flex-row justify-between px-4 mt-7">
+            <Text className="text-gray-900 text-[18px]" style={{ fontFamily: 'Montserrat-SemiBold' }} >Listrik</Text>
+            <Text className="text-gray-900 text-[18px] capitalize" style={{ fontFamily: 'Montserrat-SemiBold' }} >{profile.tegangan} Watt</Text>
+          </View>
+          <View className="flex flex-row justify-between px-4 mt-7">
+            <Text className="text-gray-900 text-[18px]" style={{ fontFamily: 'Montserrat-SemiBold' }} >Kelurahan</Text>
+            <Text className="text-gray-900 text-[18px] capitalize" style={{ fontFamily: 'Montserrat-SemiBold' }} >{profile.kelurahan}</Text>
+          </View>
+        </View>
+        <View className="mx-4 mt-7">
+          <Text className="font-normal text-red-500 text-[13px]">Aturan penetapan jumlah tagihan anda dapat dilihat pada website kami...</Text>
+        </View>
+        <View className="flex flex-col justify-center items-center">
+          <View className="w-[330px] border-2 mx-3 mt-4 border-gray-300 rounded-xl">
+            <Picker
+            selectedValue={selectedValue}
+            onValueChange={handleChangeValue}>
+              {listPayMethod.map((item) => (
+                <Picker.Item key={item.id} label={item.metode.toUpperCase()} value={item.id} />
+              ))}
+            </Picker>
+          </View>
+          <Pressable disabled={isLoading || profile.lunas} onPress={() => {sendPayload(payment)}} className="mt-5 px-5 py-4 rounded-lg" 
+          style={!profile.lunas ? {backgroundColor: Colors.orange} : {backgroundColor: Colors.hardGreen}}>
+            {!profile.lunas ? (
+            <View className="flex flex-row gap-2">
+                <Text className="text-white text-[14px]" style={{ fontFamily: 'Montserrat-SemiBold' }}>BUAT KODE BAYAR</Text>
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : ''}
+            </View>
+            ) : (
+              <Text className="text-white text-[14px]" style={{ fontFamily: 'Montserrat-SemiBold' }}>SUDAH BAYAR</Text>
+            )}
+          </Pressable>
+        </View>
+      </View>
     </View>
-  );
-};
-export default Bayar;
+  )
+}
+
+export default Bayar

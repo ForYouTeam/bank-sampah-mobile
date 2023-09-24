@@ -1,5 +1,5 @@
 import Main from "./Main"
-const endPoint = '/api/vmob/profile'
+const endPoint = '/api/vmob/metode'
 
 import Config from "./Config"
 

@@ -1,14 +1,17 @@
-import { FlatList, Image, SafeAreaView, Text, View, ActivityIndicator, RefreshControl, ScrollView } from 'react-native'
+import { FlatList, Image, SafeAreaView, Text, View, ActivityIndicator, RefreshControl, ScrollView, TouchableOpacity, Pressable, ToastAndroid, Modal } from 'react-native'
 import React, { Component, useContext, useEffect, useState } from 'react'
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, Feather, AntDesign } from "@expo/vector-icons";
 import Colors from '../sharred/Colors';
-import { PaymentProcess } from '../services/PaymentProcess';
 import Pembayaran from '../ucase/Pembayaran';
 import Profile from '../ucase/Profile';
+import Metode from '../ucase/Metode'
 import HomeSkelton from '../skelton/HomeSkelton';
+import { useGlobal } from '../store/Global';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Auth from '../ucase/Auth';
 
 const Home = () => {
-  const [refreshing, setRefreshing] = useState(false);
   const idrFromat = (number) => {
     const formatter = new Intl.NumberFormat('id-ID', {
       style: 'currency',
@@ -19,72 +22,145 @@ const Home = () => {
     return formatter.format(number);
   };
 
-  const [getProfile, setProfile, isLoading, setLoading, historyPayment, setHistoryPayment, getPayloadForm] = useContext(PaymentProcess)
+  const { profile, historyPembayaran, updateProfile, setHistoryPembayaran, loading, setLoading, setListPayMethod } = useGlobal()
+  const [newModal, setNewModal] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
-  const fetchData = async () => {
-    setRefreshing(true)
-    await Profile.getAllData()
-    .then((res) => {
-      setProfile({profile: res.data.data})
-    })
-    .catch((err) => {
-      console.log(err);
-    })
-    
+  const toggleModal = () => {
+    setNewModal(!newModal);
+  };
+
+  const navigation = useNavigation();
+  const getHistoryList = async () => {
     await Pembayaran.getAllData()
-    .then((res) => {
-      const paymentData = res.data.data.map(item => {
-          const id = item.id.toString(); // Mengonversi ID ke string
-          const bank = item.metode_bayar.metode; // Mengambil nama bank
-          const date = item.created_at.split('T')[0]; // Mengambil tanggal
-          const time = item.created_at.split('T')[1].split('.')[0]; // Mengambil waktu
+    .then( async (res) => {
+      const paymentData = await res.data.data.map(item => {
+          const id = item.id.toString(); 
+          const bank = item.metode_bayar.metode; 
+          const date = item.created_at.split('T')[0];
+          const time = item.created_at.split('T')[1].split('.')[0]; 
           const amount = item.jumlah_bayar;
-          const status = item.konfirmasi === 1; // Mengubah status menjadi boolean
+          const status = item.konfirmasi === 1;
       
           return { id, bank, date, time, amount, status };
       });
       
-      setHistoryPayment(paymentData)
+      setHistoryPembayaran(paymentData)
     })
     .catch((err) => {
-      console.log(err);
+      let status = err.response.status || 500
+      if (status === 401) {
+        AsyncStorage.setItem('user', '')
+        navigation.navigate('Login')
+      } else {
+        ToastAndroid.showWithGravity(
+          'Server dalam perbaikan, coba lagi nanti',
+          ToastAndroid.LONG,
+          ToastAndroid.CENTER
+          );
+      }
     })
+  }
+
+  const getProfile = async () => {
+    await Profile.getAllData()
+    .then((res) => {
+      updateProfile(res.data.data)
+    })
+    .catch((err) => {
+
+    })
+  }
+
+  const getPaymentList = async () => {
+    await Metode.getAllData()
+    .then((res) => {
+      setListPayMethod(res.data.data)
+    })
+    .catch((err) => {
+
+    })
+  }
+
+  const fetchData = async () => {
+    setLoading(true)
+    
+    getHistoryList()
+
+    getProfile()
+
+    getPaymentList()
     setTimeout(() => {
       setLoading(false)
     }, 800);
-    setRefreshing(false)
   };
+
+  const logout = async () => {
+    setLogoutLoading(true)
+    Auth.logout()
+    .then((res) => {
+      AsyncStorage.setItem('user', '')
+      
+      setTimeout(() => {
+        setNewModal(false)
+        navigation.navigate('Login')
+      }, 100);
+    })
+    .catch((err) => {
+      ToastAndroid.showWithGravity(
+        'Server dalam perbaikan, coba lagi nanti',
+        ToastAndroid.LONG,
+        ToastAndroid.CENTER
+        );
+        
+      setNewModal(false)
+      // setLogoutLoading(false)
+    })
+  }
+
+  useEffect(() => {
+    fetchData(); // Panggil fungsi fetchData di dalam useEffect
+  }, []);
 
   let bulanSekarang = new Date().toLocaleString('id-ID', { month: 'long' });
 
   const MainView = () => {
-    if (!isLoading) {
+    if (!loading) {
       return (
         <View className="pt-12">
           <ScrollView 
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
+              refreshing={loading}
               onRefresh={fetchData}
-              // Tambahkan deskripsi jika Anda ingin
               title="Pull to refresh"
             />
           } >
-            <View className="flex justify-center px-4">
-              <Text className="text-gray-700" style={{ fontFamily: 'Montserrat-Regular' }}>Tagihanmu</Text>
-              <Text style={{ fontFamily: 'Montserrat-Medium' }} className="text-left text-3xl text-gray-700 uppercase">{ getProfile.profile?.nama ?? '' }</Text>
+            <View className="flex flex-row justify-between items-center">
+              <View className="flex justify-center px-4">
+                <Text className="text-gray-700" style={{ fontFamily: 'Montserrat-Regular' }}>Tagihanmu</Text>
+                <Text style={{ fontFamily: 'Montserrat-Medium' }} className="text-left text-3xl text-gray-700 uppercase">{ profile?.nama ?? '' }</Text>
+              </View>
+              <Pressable onPress={() => {setNewModal(true)}} className="mr-5 mt-1">
+                <AntDesign name="logout" size={24} color="red" />
+              </Pressable>
             </View>
             <View className="flex flex-row justify-between items-center mt-7 mx-2 rounded-3xl">
               <View className="flex flex-col flex-grow rounded-l-lg px-4 py-[20px]" style={{backgroundColor: Colors.hardGreen}}>
                 <Text style={{ fontFamily: 'Montserrat-Medium' }} className="text-[13px] text-white">{ bulanSekarang }</Text>
-                <Text style={{ fontFamily: 'Montserrat-SemiBold' }} className="text-xl text-white" >{ idrFromat(getProfile.profile?.tagihan ?? 0) }</Text>
+                <Text style={{ fontFamily: 'Montserrat-SemiBold' }} className="text-xl text-white" >{ idrFromat(profile?.tagihan ?? 0) }</Text>
               </View>
               <LunasView/>
             </View>
           </ScrollView>
           <SafeAreaView>
             <View className="mt-5 h-[480px] pt-6 px-1">
-              <Text style={{ fontFamily: 'Montserrat-Bold' }} className="text-xl ml-2 text-gray-700">History Bayar</Text>
+              <View className="flex flex-row justify-between items-center">
+                <Text style={{ fontFamily: 'Montserrat-Bold' }} className="text-xl ml-2 text-gray-700">History Bayar</Text>
+                <View className="w-[150px] mr-4">
+                  <Text style={{ fontFamily: 'Montserrat-Regular' }} className="text-gray-400 text-right text-[12px]">upload bukti bayar</Text>
+                </View>
+              </View>
   
               <View className="pb-2">
                 <HistoryPaymentList />
@@ -100,10 +176,6 @@ const Home = () => {
       )
     }
   }
-
-  useEffect(() => {
-    fetchData(); // Panggil fungsi fetchData di dalam useEffect
-  }, []);
 
   const bankImages = {
     bni: require('./../assets/icon/bni.png'),
@@ -123,20 +195,24 @@ const Home = () => {
             <Text style={{ fontFamily: 'Montserrat-Regular' }} className="text-[11px]">Total Bayar</Text>
             <Text style={{ fontFamily: 'Montserrat-SemiBold' }} className="text-[16px] mt-[-3px]">{ idrFromat(item.amount) }</Text>
           </View>
-          <View className="ml-4">
-            <Ionicons name="checkmark-circle" size={29} color={Colors.hardGreen} />
-          </View>
+          <TouchableOpacity className="ml-4">
+            {item.status ? (
+              <Ionicons name="checkmark-circle" size={29} color={Colors.hardGreen} />
+            ) : (
+              <Feather name="upload-cloud" size={29} color="red" />
+            )}
+          </TouchableOpacity>
         </View>
       </View>
     </View>
   )
 
   const HistoryPaymentList = () => {
-    if (historyPayment) {
+    if (historyPembayaran && historyPembayaran.length >= 1) {
       return (
         <View>
           <FlatList
-            data={historyPayment}
+            data={historyPembayaran}
             renderItem={renderItem}
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}
@@ -154,11 +230,11 @@ const Home = () => {
   };
 
   const LunasView = () => {
-    if (!getProfile.profile?.lunas) {
+    if (!profile?.lunas) {
       return (
-        <View className="flex flex-col rounded-r-lg px-4 py-[32px]" style={{backgroundColor: Colors.orange}}>
+        <Pressable onPress={() => {}} className="flex flex-col rounded-r-lg px-4 py-[32px]" style={{backgroundColor: Colors.orange}}>
           <Text style={{ fontFamily: 'Montserrat-Bold' }} className="text-white text-sm">Belum bayar</Text>
-        </View>
+        </Pressable>
       )
     } else {
      return (
@@ -172,6 +248,37 @@ const Home = () => {
   return (
     <View>
       <MainView />
+      
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={newModal}
+        onRequestClose={toggleModal}
+      >
+        <View className="absolute top-0 left-0 w-full h-full bg-black opacity-40" />
+
+        <View className="flex flex-row justify-center">
+          <View className="bg-white w-[300px] h-[300px] top-[170px] rounded-xl px-3 py-2">
+            <View className="flex flex-col justify-center items-center mt-8">
+              <Text style={{ fontFamily: 'Montserrat-Regular' }} className="text-lg">Anda ingin logout ?</Text>
+              <Image className="h-[130px] w-[130px] mt-[8px]" source={require('./../assets/icon/logout.png')} />
+              <View className="flex flex-row gap-4 justify-around mt-4">
+                <Pressable disabled={logoutLoading} onPress={() => {
+                  logout()
+                }} className="bg-red-500 w-[100px] h-[35px] flex flex-row justify-center items-center rounded-lg">
+                  <Text className="text-white">Logout</Text>
+                  {logoutLoading ? (
+                    <ActivityIndicator className="ml-2" size={16} color="#FFF" />
+                    ) : ''}
+                </Pressable>
+                <Pressable onPress={() => {setNewModal(false)}} className="bg-gray-500 w-[100px] h-[35px] flex flex-col justify-center items-center rounded-lg">
+                  <Text className="text-white">Batal</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }

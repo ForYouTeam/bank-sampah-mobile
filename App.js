@@ -5,11 +5,14 @@ import TabNavigation from './navigation/TabNavigation';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback } from 'react';
-import { StateProvide } from './services/PaymentProcess';
-import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { GlobalProvider } from './store/Global';
+import { createStackNavigator } from '@react-navigation/stack';
+import SplashScreenComponent from './components/SplashScreenComponent';
 // import SplashScreen from './components/SplashScreen';
 
 SplashScreen.preventAutoHideAsync();
+
+const Stack = createStackNavigator();
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -30,13 +33,24 @@ export default function App() {
   }
 
   return (
-    <StateProvide>
+    <GlobalProvider>
       <View style={styles.container} onLayout={onLayoutRootView}>
         <NavigationContainer>
-          <TabNavigation />
+          <Stack.Navigator initialRouteName="MainHome">
+            <Stack.Screen
+              name="Login"
+              component={SplashScreenComponent}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="MainHome"
+              component={TabNavigation}
+              options={{ headerShown: false }}
+            />
+          </Stack.Navigator>
         </NavigationContainer>
       </View>
-    </StateProvide>
+    </GlobalProvider>
   );
 }
 
